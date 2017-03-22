@@ -1,280 +1,274 @@
-//
-//  GoelocationModule.m
-//  RCTBaiduMap
-//
-//  Created by lovebing on 2016/10/28.
-//  Copyright © 2016年 lovebing.org. All rights reserved.
-//
+package org.lovebing.reactnative.baidumap;
 
-#import "GeolocationModule.h"
-#import "RCTUtils.h"
+import android.util.Log;
 
+import com.baidu.location.BDLocation;
+import com.baidu.location.BDLocationListener;
+import com.baidu.location.LocationClient;
+import com.baidu.location.LocationClientOption;
+import com.baidu.mapapi.model.LatLng;
+import com.baidu.mapapi.search.core.PoiInfo;
+import com.baidu.mapapi.search.core.SearchResult;
+import com.baidu.mapapi.search.geocode.GeoCodeOption;
+import com.baidu.mapapi.search.geocode.GeoCodeResult;
+import com.baidu.mapapi.search.geocode.GeoCoder;
+import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener;
+import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption;
+import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult;
+import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
+import com.baidu.mapapi.search.poi.PoiCitySearchOption;
+import com.baidu.mapapi.search.poi.PoiDetailResult;
+import com.baidu.mapapi.search.poi.PoiIndoorResult;
+import com.baidu.mapapi.search.poi.PoiResult;
+import com.baidu.mapapi.search.poi.PoiSearch;
+import com.baidu.mapapi.utils.CoordinateConverter;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.WritableArray;
+import com.facebook.react.bridge.WritableMap;
 
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.BUS_STATION;
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.POINT;
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.SUBWAY_STATION;
 
-@implementation GeolocationModule {
-    BMKPointAnnotation* _annotation;
-}
+/**
+ * Created by lovebing on 2016/10/28.
+ */
+public class GeolocationModule extends BaseModule
+        implements BDLocationListener, OnGetGeoCoderResultListener, OnGetPoiSearchResultListener {
 
-@synthesize bridge = _bridge;
+    private LocationClient locationClient;
+    private static GeoCoder geoCoder;
+    private static PoiSearch poiSearch;
+    private String city = "北京";
 
-static BMKGeoCodeSearch *geoCodeSearch;
-static BMKLocationService *locationService;
-static BMKPoiSearch *geoPoiSearch;
-
-RCT_EXPORT_MODULE(BaiduGeolocationModule);
-
-RCT_EXPORT_METHOD(getBaiduCoorFromGPSCoor:(double)lat lng:(double)lng
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
-    NSLog(@"getBaiduCoorFromGPSCoor");
-    CLLocationCoordinate2D baiduCoor = [self getBaiduCoor:lat lng:lng];
-    
-    NSDictionary* coor = @{
-                           @"latitude": @(baiduCoor.latitude),
-                           @"longitude": @(baiduCoor.longitude)
-                           };
-    
-    resolve(coor);
-}
-
-RCT_EXPORT_METHOD(geocode:(NSString *)city addr:(NSString *)addr) {
-    
-    [self getGeocodesearch].delegate = self;
-    
-    BMKGeoCodeSearchOption *geoCodeSearchOption = [[BMKGeoCodeSearchOption alloc]init];
-    
-    geoCodeSearchOption.city= city;
-    geoCodeSearchOption.address = addr;
-    
-    BOOL flag = [[self getGeocodesearch] geoCode:geoCodeSearchOption];
-    
-    if(flag) {
-        NSLog(@"geo检索发送成功");
-    } else{
-        NSLog(@"geo检索发送失败");
-    }
-}
-
-RCT_EXPORT_METHOD(geoCodeCityKeyWord:(NSString*)keyword pageNum:(int)pageNum pageCapacity:(int)pageCapacity) {
-    [self getGeoPoiSearch].delegate = self;
-    BMKCitySearchOption *option = [[BMKCitySearchOption alloc]init];
-    if (pageNum != NULL) {
-        option.pageIndex = pageNum;
-    } else {
-        option.pageIndex = 0;
-    }
-    if (pageCapacity != NULL) {
-        option.pageCapacity = pageCapacity;
-    } else {
-        option.pageCapacity = 10;
-    }
-    option.city = self.city;
-    option.keyword = keyword;
-    BOOL flag = [[self getGeoPoiSearch] poiSearchInCity:option];
-    
-    if(flag) {
-        NSLog(@"geo检索发送成功");
-    } else{
-        NSLog(@"geo检索发送失败");
+    public GeolocationModule(ReactApplicationContext reactContext) {
+        super(reactContext);
+        context = reactContext;
     }
 
-}
-RCT_EXPORT_METHOD(reverseGeoCode:(double)lat lng:(double)lng) {
-    
-    [self getGeocodesearch].delegate = self;
-    CLLocationCoordinate2D baiduCoor = CLLocationCoordinate2DMake(lat, lng);
-    
-    CLLocationCoordinate2D pt = (CLLocationCoordinate2D){baiduCoor.latitude, baiduCoor.longitude};
-    
-    BMKReverseGeoCodeOption *reverseGeoCodeSearchOption = [[BMKReverseGeoCodeOption alloc]init];
-    reverseGeoCodeSearchOption.reverseGeoPoint = pt;
-    
-    BOOL flag = [[self getGeocodesearch] reverseGeoCode:reverseGeoCodeSearchOption];
-    
-    if(flag) {
-        NSLog(@"逆向地理编码发送成功");
+    public String getName() {
+        return "BaiduGeolocationModule";
     }
-    //[reverseGeoCodeSearchOption release];
-}
 
-RCT_EXPORT_METHOD(reverseGeoCodeGPS:(double)lat lng:(double)lng) {
-    
-    [self getGeocodesearch].delegate = self;
-    CLLocationCoordinate2D baiduCoor = [self getBaiduCoor:lat lng:lng];
-    
-    CLLocationCoordinate2D pt = (CLLocationCoordinate2D){baiduCoor.latitude, baiduCoor.longitude};
-    
-    BMKReverseGeoCodeOption *reverseGeoCodeSearchOption = [[BMKReverseGeoCodeOption alloc]init];
-    reverseGeoCodeSearchOption.reverseGeoPoint = pt;
-    
-    BOOL flag = [[self getGeocodesearch] reverseGeoCode:reverseGeoCodeSearchOption];
-    
-    if(flag) {
-        NSLog(@"逆向地理编码发送成功");
+
+    private void initLocationClient() {
+        LocationClientOption option = new LocationClientOption();
+        option.setCoorType("bd09ll");
+        option.setIsNeedAddress(true);
+        option.setIsNeedAltitude(true);
+        option.setIsNeedLocationDescribe(true);
+        option.setOpenGps(true);
+        locationClient = new LocationClient(context.getApplicationContext());
+        locationClient.setLocOption(option);
+        Log.i("locationClient", "locationClient");
+        locationClient.registerLocationListener(this);
     }
-    //[reverseGeoCodeSearchOption release];
-}
-
--(BMKGeoCodeSearch *)getGeocodesearch{
-    if(geoCodeSearch == nil) {
-        geoCodeSearch = [[BMKGeoCodeSearch alloc]init];
+    /**
+     *
+     * @return
+     */
+    protected GeoCoder getGeoCoder() {
+        if(geoCoder != null) {
+            geoCoder.destroy();
+        }
+        geoCoder = GeoCoder.newInstance();
+        geoCoder.setOnGetGeoCodeResultListener(this);
+        return geoCoder;
     }
-    return geoCodeSearch;
-}
 
--(BMKPoiSearch *)getGeoPoiSearch{
-    if (geoPoiSearch == nil) {
-        geoPoiSearch = [[BMKPoiSearch alloc]init];
+    /**
+     *
+     * @return
+     */
+    protected PoiSearch getPoiSearch(){
+        if (poiSearch != null) {
+            poiSearch.destroy();
+        }
+        poiSearch = poiSearch.newInstance();
+        poiSearch.setOnGetPoiSearchResultListener(this);
+        return poiSearch;
     }
-    return geoPoiSearch;
-}
 
-//实现PoiSearchDeleage处理回调结果
-- (void)onGetPoiResult:(BMKPoiSearch*)searcher result:(BMKPoiResult*)poiResultList errorCode:(BMKSearchErrorCode)error
-{
-    NSMutableDictionary *body = [self getEmptyBody];
+    /**
+     *
+     * @param sourceLatLng
+     * @return
+     */
+    protected LatLng getBaiduCoorFromGPSCoor(LatLng sourceLatLng) {
+        CoordinateConverter converter = new CoordinateConverter();
+        converter.from(CoordinateConverter.CoordType.GPS);
+        converter.coord(sourceLatLng);
+        LatLng desLatLng = converter.convert();
+        return desLatLng;
 
-    if (error == BMK_SEARCH_NO_ERROR) {
-        //在此处理正常结果
-        NSMutableArray *list = [NSMutableArray arrayWithCapacity:11];
-        for (BMKPoiInfo *info in poiResultList.poiInfoList) {
-            if (info) {
-                
-                [list addObject: @{
-                                   @"address": info.address,
-                                   @"latitude": @(RCTZeroIfNaN(info.pt.latitude)),
-                                   @"longitude": @(RCTZeroIfNaN(info.pt.longitude)),
-                                   @"name": info.name,
-                                   @"city": info.city,
-                                   @"postcode": info.postcode,
-                                   @"phone": info.phone,
-                                   @"uid": info.uid,
-                                   }];
+    }
+
+    @ReactMethod
+    public void getCurrentPosition() {
+        if(locationClient == null) {
+            initLocationClient();
+        }
+        Log.i("getCurrentPosition", "getCurrentPosition");
+        locationClient.start();
+    }
+    @ReactMethod
+    public void geocode(String city, String addr) {
+        getGeoCoder().geocode(new GeoCodeOption()
+                .city(city).address(addr));
+    }
+
+    @ReactMethod
+    public void reverseGeoCode(double lat, double lng) {
+        getGeoCoder().reverseGeoCode(new ReverseGeoCodeOption()
+                .location(new LatLng(lat, lng)));
+    }
+
+    @ReactMethod
+    public void reverseGeoCodeGPS(double lat, double lng) {
+        getGeoCoder().reverseGeoCode(new ReverseGeoCodeOption()
+                .location(getBaiduCoorFromGPSCoor(new LatLng(lat, lng))));
+    }
+
+    @ReactMethod
+    public void geoCodeCityKeyWord(String keyword, Integer pageNum, Integer pageCapacity){
+        PoiCitySearchOption option = new PoiCitySearchOption();
+        option.city(city);
+        if (pageNum != null) {
+            option.pageNum(pageNum);
+        } else {
+            option.pageNum(0);
+        }
+        if (pageCapacity != null){
+            option.pageCapacity(pageCapacity);
+        } else {
+            option.pageCapacity(15);
+        }
+        option.keyword(keyword);
+        getPoiSearch().searchInCity(option);
+    }
+
+    @Override
+    public void onGetPoiResult(PoiResult poiResult) {
+        WritableMap params = Arguments.createMap();
+        if (poiResult.getAllPoi() == null || poiResult.getAllPoi().isEmpty()) {
+            params.putInt("errcode", -1);
+        } else {
+            WritableArray poiArray = Arguments.createArray();
+
+            for (PoiInfo p : poiResult.getAllPoi()) {
+                if (p.type == POINT || p.type == BUS_STATION || p.type == SUBWAY_STATION) {
+                    WritableMap tempParams = Arguments.createMap();
+                    tempParams.putString("address", p.address);
+                    tempParams.putString("name", p.name);
+                    tempParams.putString("city", p.city);
+                    tempParams.putString("phone", p.phoneNum);
+                    tempParams.putString("postCode", p.postCode);
+                    tempParams.putBoolean("isPano", p.isPano);
+                    tempParams.putDouble("latitude", p.location.latitude);
+                    tempParams.putDouble("longitude", p.location.longitude);
+                    tempParams.putString("uid", p.uid);
+                    poiArray.pushMap(tempParams);
+                }
+            }
+
+            params.putArray("result", poiArray);
+        }
+
+        sendEvent("onGetPoiResult", params);
+
+    }
+
+    @Override
+    public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
+
+    }
+
+    @Override
+    public void onGetPoiIndoorResult(PoiIndoorResult poiIndoorResult) {
+
+    }
+
+    @Override
+    public void onReceiveLocation(BDLocation bdLocation) {
+        WritableMap params = Arguments.createMap();
+        params.putDouble("latitude", bdLocation.getLatitude());
+        params.putDouble("longitude", bdLocation.getLongitude());
+        params.putDouble("direction", bdLocation.getDirection());
+        params.putDouble("altitude", bdLocation.getAltitude());
+        params.putDouble("radius", bdLocation.getRadius());
+        params.putString("address", bdLocation.getAddrStr());
+        params.putString("countryCode", bdLocation.getCountryCode());
+        params.putString("country", bdLocation.getCountry());
+        params.putString("province", bdLocation.getProvince());
+        params.putString("cityCode", bdLocation.getCityCode());
+        params.putString("city", bdLocation.getCity());
+        params.putString("district", bdLocation.getDistrict());
+        params.putString("street", bdLocation.getStreet());
+        params.putString("streetNumber", bdLocation.getStreetNumber());
+        params.putString("buildingId", bdLocation.getBuildingID());
+        params.putString("buildingName", bdLocation.getBuildingName());
+
+        Log.i("onReceiveLocation", "onGetCurrentLocationPosition");
+        sendEvent("onGetCurrentLocationPosition", params);
+        locationClient.stop();
+    }
+
+    @Override
+    public void onGetGeoCodeResult(GeoCodeResult result) {
+        WritableMap params = Arguments.createMap();
+        if (result == null || result.error != SearchResult.ERRORNO.NO_ERROR) {
+            params.putInt("errcode", -1);
+        }
+        else {
+            params.putDouble("latitude",  result.getLocation().latitude);
+            params.putDouble("longitude",  result.getLocation().longitude);
+            params.putString("address", result.getAddress());
+        }
+        sendEvent("onGetGeoCodeResult", params);
+    }
+
+    @Override
+    public void onGetReverseGeoCodeResult(ReverseGeoCodeResult result) {
+        WritableMap params = Arguments.createMap();
+        if (result == null || result.error != SearchResult.ERRORNO.NO_ERROR) {
+            params.putInt("errcode", -1);
+        }
+        else {
+            ReverseGeoCodeResult.AddressComponent addressComponent = result.getAddressDetail();
+
+            params.putString("address", result.getAddress());
+            params.putString("province", addressComponent.province);
+            params.putString("city", addressComponent.city);
+            params.putString("district", addressComponent.district);
+            params.putString("street", addressComponent.street);
+            params.putString("streetNumber", addressComponent.streetNumber);
+            //设置所在城市
+            city = addressComponent.city;
+
+            if (result.getPoiList() != null){
+                WritableArray poiArray = Arguments.createArray();
+
+                for (PoiInfo p: result.getPoiList()) {
+                    WritableMap poiParams = Arguments.createMap();
+                    poiParams.putString("address", p.address);
+                    poiParams.putString("city", p.city);
+                    poiParams.putString("name", p.name);
+                    poiParams.putString("phoneNum", p.phoneNum);
+                    poiParams.putString("postCode", p.postCode);
+                    poiParams.putString("uid", p.uid);
+                    poiParams.putBoolean("isPano", p.isPano);
+                    poiParams.putDouble("latitude", p.location.latitude);
+                    poiParams.putDouble("longitude", p.location.longitude);
+
+                    poiArray.pushMap(poiParams);
+                }
+
+                params.putArray("nearbyPOI", poiArray);
             }
         }
-    
-        body[@"result"] = list;
+
+        sendEvent("onGetReverseGeoCodeResult", params);
     }
-    else {
-        body[@"errcode"] = [NSString stringWithFormat:@"%d", error];
-        body[@"errmsg"] = [self getSearchErrorInfo:error];
-    }
-    
-    [self sendEvent:@"onGetPoiResult" body:body];
-    
-    geoCodeSearch.delegate = nil;
 }
-
-- (void)onGetGeoCodeResult:(BMKGeoCodeSearch *)searcher result:(BMKGeoCodeResult *)result errorCode:(BMKSearchErrorCode)error{
-    NSMutableDictionary *body = [self getEmptyBody];
-    
-    if (error == BMK_SEARCH_NO_ERROR) {
-        NSString *latitude = [NSString stringWithFormat:@"%f", result.location.latitude];
-        NSString *longitude = [NSString stringWithFormat:@"%f", result.location.longitude];
-        body[@"latitude"] = latitude;
-        body[@"longitude"] = longitude;
-        body[@"address"] = result.address;
-    }
-    else {
-        body[@"errcode"] = [NSString stringWithFormat:@"%d", error];
-        body[@"errmsg"] = [self getSearchErrorInfo:error];
-    }
-    [self sendEvent:@"onGetGeoCodeResult" body:body];
-    
-}
--(void) onGetReverseGeoCodeResult:(BMKGeoCodeSearch *)searcher result:(BMKReverseGeoCodeResult *)result
-                        errorCode:(BMKSearchErrorCode)error {
-    
-    NSMutableDictionary *body = [self getEmptyBody];
-    
-    if (error == BMK_SEARCH_NO_ERROR) {
-        body[@"address"] = result.address;
-        body[@"province"] = result.addressDetail.province;
-        body[@"city"] = result.addressDetail.city;
-        self.city = result.addressDetail.city;
-        body[@"district"] = result.addressDetail.district;
-        body[@"streetName"] = result.addressDetail.streetName;
-        body[@"streetNumber"] = result.addressDetail.streetNumber;
-        body[@"businessCircle"] = result.businessCircle;
-        
-        NSMutableArray *list = [NSMutableArray arrayWithCapacity:11];
-        for (BMKPoiInfo *info in result.poiList) {
-            if (info) {
-                [list addObject: @{
-                                   @"address": info.address,
-                                   @"latitude": @(RCTZeroIfNaN(info.pt.latitude)),
-                                   @"longitude": @(RCTZeroIfNaN(info.pt.longitude)),
-                                   @"name": info.name,
-                                   @"city": info.city,
-                                }];
-            }
-        }
-        
-        body[@"nearbyPOI"] = list;
-    }
-    else {
-        body[@"errcode"] = [NSString stringWithFormat:@"%d", error];
-        body[@"errmsg"] = [self getSearchErrorInfo:error];
-    }
-    [self sendEvent:@"onGetReverseGeoCodeResult" body:body];
-    
-    geoCodeSearch.delegate = nil;
-}
-
-
--(NSString *)getSearchErrorInfo:(BMKSearchErrorCode)error {
-    NSString *errormsg = @"未知";
-    switch (error) {
-        case BMK_SEARCH_AMBIGUOUS_KEYWORD:
-            errormsg = @"检索词有岐义";
-            break;
-        case BMK_SEARCH_AMBIGUOUS_ROURE_ADDR:
-            errormsg = @"检索地址有岐义";
-            break;
-        case BMK_SEARCH_NOT_SUPPORT_BUS:
-            errormsg = @"该城市不支持公交搜索";
-            break;
-        case BMK_SEARCH_NOT_SUPPORT_BUS_2CITY:
-            errormsg = @"不支持跨城市公交";
-            break;
-        case BMK_SEARCH_RESULT_NOT_FOUND:
-            errormsg = @"没有找到检索结果";
-            break;
-        case BMK_SEARCH_ST_EN_TOO_NEAR:
-            errormsg = @"起终点太近";
-            break;
-        case BMK_SEARCH_KEY_ERROR:
-            errormsg = @"key错误";
-            break;
-        case BMK_SEARCH_NETWOKR_ERROR:
-            errormsg = @"网络连接错误";
-            break;
-        case BMK_SEARCH_NETWOKR_TIMEOUT:
-            errormsg = @"网络连接超时";
-            break;
-        case BMK_SEARCH_PERMISSION_UNFINISHED:
-            errormsg = @"还未完成鉴权，请在鉴权通过后重试";
-            break;
-        case BMK_SEARCH_INDOOR_ID_ERROR:
-            errormsg = @"室内图ID错误";
-            break;
-        case BMK_SEARCH_FLOOR_ERROR:
-            errormsg = @"室内图检索楼层错误";
-            break;
-        default:
-            break;
-    }
-    return errormsg;
-}
-
--(CLLocationCoordinate2D)getBaiduCoor:(double)lat lng:(double)lng {
-    CLLocationCoordinate2D coor = CLLocationCoordinate2DMake(lat, lng);
-    NSDictionary* testdic = BMKConvertBaiduCoorFrom(coor,BMK_COORDTYPE_COMMON);
-    testdic = BMKConvertBaiduCoorFrom(coor,BMK_COORDTYPE_GPS);
-    CLLocationCoordinate2D baiduCoor = BMKCoorDictionaryDecode(testdic);
-    
-    return baiduCoor;
-}
-
-
-@end

@@ -28,6 +28,10 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.BUS_STATION;
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.POINT;
+import static com.baidu.mapapi.search.core.PoiInfo.POITYPE.SUBWAY_STATION;
+
 /**
  * Created by lovebing on 2016/10/28.
  */
@@ -139,7 +143,7 @@ public class GeolocationModule extends BaseModule
         if (pageCapacity != null){
             option.pageCapacity(pageCapacity);
         } else {
-            option.pageCapacity(10);
+            option.pageCapacity(15);
         }
         option.keyword(keyword);
         getPoiSearch().searchInCity(option);
@@ -148,29 +152,31 @@ public class GeolocationModule extends BaseModule
     @Override
     public void onGetPoiResult(PoiResult poiResult) {
         WritableMap params = Arguments.createMap();
-        if (!poiResult.isHasAddrInfo()) {
+        if (poiResult.getAllPoi().isEmpty()) {
             params.putInt("errcode", -1);
         } else {
             WritableArray poiArray = Arguments.createArray();
 
             for (PoiInfo p : poiResult.getAllPoi()) {
-                WritableMap tempParams = Arguments.createMap();
-                tempParams.putString("address", p.address);
-                tempParams.putString("name", p.name);
-                tempParams.putString("city", p.city);
-                tempParams.putString("phone", p.phoneNum);
-                tempParams.putString("postCode", p.postCode);
-                tempParams.putBoolean("isPano", p.isPano);
-                tempParams.putDouble("latitude", p.location.latitude);
-                tempParams.putDouble("longitude", p.location.longitude);
-                tempParams.putString("uid", p.uid);
-                poiArray.pushArray(poiArray);
-
+                if (p.type == POINT || p.type == BUS_STATION || p.type == SUBWAY_STATION) {
+                    WritableMap tempParams = Arguments.createMap();
+                    tempParams.putString("address", p.address);
+                    tempParams.putString("name", p.name);
+                    tempParams.putString("city", p.city);
+                    tempParams.putString("phone", p.phoneNum);
+                    tempParams.putString("postCode", p.postCode);
+                    tempParams.putBoolean("isPano", p.isPano);
+                    tempParams.putDouble("latitude", p.location.latitude);
+                    tempParams.putDouble("longitude", p.location.longitude);
+                    tempParams.putString("uid", p.uid);
+                    poiArray.pushMap(tempParams);
+                }
             }
 
             params.putArray("result", poiArray);
         }
 
+        sendEvent("onGetPoiResult", params);
 
     }
 
@@ -256,7 +262,7 @@ public class GeolocationModule extends BaseModule
                     poiParams.putDouble("latitude", p.location.latitude);
                     poiParams.putDouble("longitude", p.location.longitude);
 
-                    poiArray.pushMap(params);
+                    poiArray.pushMap(poiParams);
                 }
 
                 params.putArray("nearbyPOI", poiArray);
