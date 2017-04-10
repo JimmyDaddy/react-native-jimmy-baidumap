@@ -1,6 +1,6 @@
 {
   "name": "react-native-jimmy-baidumap",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "baidumap react-native module",
   "main": "index.js",
   "scripts": {
